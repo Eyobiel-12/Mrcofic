@@ -35,6 +35,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set())
   const processingRef = useRef<Set<string>>(new Set())
   const lastActionRef = useRef<{ id: string; action: string; timestamp: number } | null>(null)
+  const [activeTab, setActiveTab] = useState<"pending" | "approved" | "rejected" | "all">("all")
 
   // Statistics
   const stats = useMemo(() => {
@@ -160,6 +161,49 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     setAppointments(filteredAndSortedAppointments)
   }, [filteredAndSortedAppointments])
 
+  // Group appointments by status (based on all appointments, not filtered)
+  const appointmentsByStatus = useMemo(() => {
+    // Apply all filters except status filter for tab counts
+    let filtered = [...allAppointments]
+
+    // Date range filter
+    const dateRangeStart = getDateRangeFilter()
+    if (dateRangeStart && dateRange !== "all") {
+      filtered = filtered.filter(a => {
+        const aptDate = new Date(a.date)
+        aptDate.setHours(0, 0, 0, 0)
+        const rangeStart = new Date(dateRangeStart)
+        rangeStart.setHours(0, 0, 0, 0)
+        return aptDate >= rangeStart
+      })
+    }
+
+    // Specific date filter
+    if (dateFilter) {
+      filtered = filtered.filter(a => a.date === dateFilter)
+    }
+
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase().trim()
+      filtered = filtered.filter(a =>
+        a.name.toLowerCase().includes(query) ||
+        a.email.toLowerCase().includes(query) ||
+        (a.phone && a.phone.replace(/\s/g, "").includes(query.replace(/\s/g, ""))) ||
+        a.date.includes(query) ||
+        a.time.includes(query) ||
+        (a.message && a.message.toLowerCase().includes(query)) ||
+        a.id.toLowerCase().includes(query)
+      )
+    }
+
+    // Group by status (status filter is NOT applied here for tabs)
+    const pending = filtered.filter(a => a.status === "pending")
+    const approved = filtered.filter(a => a.status === "approved")
+    const rejected = filtered.filter(a => a.status === "rejected")
+    return { pending, approved, rejected }
+  }, [allAppointments, dateFilter, dateRange, searchQuery])
+
   // Reset date range when specific date is selected
   useEffect(() => {
     if (dateFilter) {
@@ -211,6 +255,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         console.log("✅ Approve successful for:", id)
         fetchAppointments()
         setSelectedIds(new Set())
+        setActiveTab("approved") // Switch to approved tab after approval
       } else {
         console.error("❌ Approve failed for:", id)
         alert("Fout bij goedkeuren")
@@ -279,6 +324,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         console.log("✅ Reject successful for:", id)
         fetchAppointments()
         setSelectedIds(new Set())
+        setActiveTab("rejected") // Switch to rejected tab after rejection
       } else {
         console.error("❌ Reject failed for:", id)
         alert("Fout bij afwijzen")
@@ -324,6 +370,50 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       setShowBulkActions(false)
     } catch (err) {
       alert("Fout bij bulk afwijzen")
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Weet je zeker dat je deze afspraak wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.")) {
+      return
+    }
+
+    // Prevent double-clicks
+    if (processingIds.has(id) || processingRef.current.has(id)) {
+      return
+    }
+
+    processingRef.current.add(id)
+    setProcessingIds(prev => new Set(prev).add(id))
+
+    try {
+      console.log("🗑️ Calling delete API for:", id)
+      const response = await fetch("/api/admin/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      })
+
+      if (response.ok) {
+        console.log("✅ Delete successful for:", id)
+        fetchAppointments()
+        setSelectedIds(new Set())
+      } else {
+        console.error("❌ Delete failed for:", id)
+        alert("Fout bij verwijderen")
+      }
+    } catch (err) {
+      console.error("❌ Delete error for:", id, err)
+      alert("Fout bij verwijderen")
+    } finally {
+      setTimeout(() => {
+        processingRef.current.delete(id)
+        setProcessingIds(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(id)
+          return newSet
+        })
+      }, 500)
     }
   }
 
@@ -793,260 +883,479 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               <p className="text-body text-sm">Probeer andere filters of zoektermen</p>
         </div>
       ) : (
-        <div className="space-y-4">
-              {appointments.map((apt, index) => {
-                const isPending = apt.status === "pending"
-                const isApproved = apt.status === "approved"
-                const isRejected = apt.status === "rejected"
-                
-                return (
-            <div
-              key={apt.id}
-                    className={`group luxury-card p-0 overflow-hidden transition-all duration-300 hover:shadow-luxury-lg hover:-translate-y-1 ${
-                      isPending
-                        ? "border-l-4 border-l-yellow-500 bg-gradient-to-br from-yellow-50 via-white to-white"
-                        : isApproved
-                        ? "border-l-4 border-l-green-500 bg-gradient-to-br from-green-50 via-white to-white"
-                        : "border-l-4 border-l-red-500 bg-gradient-to-br from-red-50 via-white to-white"
-                    }`}
-                    style={{
-                      animationDelay: `${index * 50}ms`,
-                    }}
-                  >
-                    {/* Status indicator bar */}
-                    <div className={`h-1 w-full ${
-                      isPending ? "bg-gradient-to-r from-yellow-400 to-yellow-600" :
-                      isApproved ? "bg-gradient-to-r from-green-400 to-green-600" :
-                      "bg-gradient-to-r from-red-400 to-red-600"
-                    }`}></div>
+        <div className="space-y-8">
+          {/* Helper function to render a card */}
+          {(() => {
+            const renderCard = (apt: Appointment, index: number) => {
+              const isPending = apt.status === "pending"
+              const isApproved = apt.status === "approved"
+              const isRejected = apt.status === "rejected"
+              
+              return (
+                <div
+                  key={apt.id}
+                  className={`group luxury-card p-0 overflow-hidden transition-all duration-300 hover:shadow-luxury-lg hover:-translate-y-1 ${
+                    isPending
+                      ? "border-l-4 border-l-yellow-500 bg-gradient-to-br from-yellow-50 via-white to-white"
+                      : isApproved
+                      ? "border-l-4 border-l-green-500 bg-gradient-to-br from-green-50 via-white to-white"
+                      : "border-l-4 border-l-red-500 bg-gradient-to-br from-red-50 via-white to-white"
+                  }`}
+                  style={{
+                    animationDelay: `${index * 50}ms`,
+                  }}
+                >
+                  {/* Status indicator bar */}
+                  <div className={`h-1 w-full ${
+                    isPending ? "bg-gradient-to-r from-yellow-400 to-yellow-600" :
+                    isApproved ? "bg-gradient-to-r from-green-400 to-green-600" :
+                    "bg-gradient-to-r from-red-400 to-red-600"
+                  }`}></div>
 
-                    <div className="p-5 md:p-6">
-                      <div className="flex flex-col lg:flex-row gap-5">
-                        {/* Left side - Content */}
-                        <div className="flex items-start gap-4 flex-1 min-w-0">
-                          {/* Checkbox */}
-                          <div className="mt-1">
-                            <input
-                              type="checkbox"
-                              checked={selectedIds.has(apt.id)}
-                              onChange={() => toggleSelect(apt.id)}
-                              className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 cursor-pointer transition-all"
-                            />
+                  <div className="p-5 md:p-6">
+                    <div className="flex flex-col lg:flex-row gap-5">
+                      {/* Left side - Content */}
+                      <div className="flex items-start gap-4 flex-1 min-w-0">
+                        {/* Checkbox */}
+                        <div className="mt-1">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(apt.id)}
+                            onChange={() => toggleSelect(apt.id)}
+                            className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 cursor-pointer transition-all"
+                          />
+                        </div>
+
+                        {/* Main content */}
+                        <div className="flex-1 min-w-0">
+                          {/* Header with name and status */}
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+                            <div className="flex-1">
+                              <h3 className="text-xl md:text-2xl font-bold text-primary-900 font-display mb-2 group-hover:text-primary-700 transition-colors">
+                                {apt.name}
+                              </h3>
+                              <div className="flex items-center gap-2">
+                                {getStatusBadge(apt.status)}
+                                <span className="text-xs text-gray-500">
+                                  ID: {apt.id.slice(0, 8)}...
+                                </span>
+                              </div>
+                            </div>
                           </div>
 
-                          {/* Main content */}
-                <div className="flex-1 min-w-0">
-                            {/* Header with name and status */}
-                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
-                              <div className="flex-1">
-                                <h3 className="text-xl md:text-2xl font-bold text-primary-900 font-display mb-2 group-hover:text-primary-700 transition-colors">
-                                  {apt.name}
-                                </h3>
-                                <div className="flex items-center gap-2">
-                    {getStatusBadge(apt.status)}
-                                  <span className="text-xs text-gray-500">
-                                    ID: {apt.id.slice(0, 8)}...
-                                  </span>
-                                </div>
+                          {/* Info grid */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4">
+                            {/* Email */}
+                            <div className="flex items-start gap-3 p-3 bg-white/60 rounded-lg border border-gray-100 hover:border-primary-200 transition-colors group/item">
+                              <div className="p-2 bg-primary-100 rounded-lg flex-shrink-0">
+                                <svg className="w-5 h-5 text-primary-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">E-mail</p>
+                                <a href={`mailto:${apt.email}`} className="text-primary-700 hover:text-primary-900 hover:underline break-all font-medium transition-colors">
+                                  {apt.email}
+                                </a>
                               </div>
                             </div>
 
-                            {/* Info grid */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4">
-                              {/* Email */}
+                            {/* Phone */}
+                            {apt.phone && (
                               <div className="flex items-start gap-3 p-3 bg-white/60 rounded-lg border border-gray-100 hover:border-primary-200 transition-colors group/item">
                                 <div className="p-2 bg-primary-100 rounded-lg flex-shrink-0">
                                   <svg className="w-5 h-5 text-primary-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                                   </svg>
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">E-mail</p>
-                                  <a href={`mailto:${apt.email}`} className="text-primary-700 hover:text-primary-900 hover:underline break-all font-medium transition-colors">
-                                    {apt.email}
+                                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Telefoon</p>
+                                  <a href={`tel:${apt.phone}`} className="text-primary-700 hover:text-primary-900 hover:underline font-medium transition-colors">
+                                    {apt.phone}
                                   </a>
                                 </div>
-                  </div>
-
-                              {/* Phone */}
-                    {apt.phone && (
-                                <div className="flex items-start gap-3 p-3 bg-white/60 rounded-lg border border-gray-100 hover:border-primary-200 transition-colors group/item">
-                                  <div className="p-2 bg-primary-100 rounded-lg flex-shrink-0">
-                                    <svg className="w-5 h-5 text-primary-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                                    </svg>
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Telefoon</p>
-                                    <a href={`tel:${apt.phone}`} className="text-primary-700 hover:text-primary-900 hover:underline font-medium transition-colors">
-                                      {apt.phone}
-                                    </a>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Date */}
-                              <div className="flex items-start gap-3 p-3 bg-white/60 rounded-lg border border-gray-100 hover:border-primary-200 transition-colors group/item">
-                                <div className="p-2 bg-gold-100 rounded-lg flex-shrink-0">
-                                  <svg className="w-5 h-5 text-gold-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                  </svg>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Datum</p>
-                                  <p className="text-primary-800 font-semibold">
-                      {new Date(apt.date).toLocaleDateString("nl-NL", {
-                        weekday: "long",
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      })}
-                    </p>
-                                </div>
-                              </div>
-
-                              {/* Time */}
-                              <div className="flex items-start gap-3 p-3 bg-white/60 rounded-lg border border-gray-100 hover:border-primary-200 transition-colors group/item">
-                                <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
-                                  <svg className="w-5 h-5 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Tijd</p>
-                                  <p className="text-primary-800 font-semibold text-lg">{apt.time}</p>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Message */}
-                    {apt.message && (
-                              <div className="mb-4 p-4 bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200 shadow-sm">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <svg className="w-4 h-4 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                                  </svg>
-                                  <p className="text-xs font-semibold text-primary-800 uppercase tracking-wide">Bericht</p>
-                                </div>
-                                <p className="text-sm text-body break-words leading-relaxed">{apt.message}</p>
                               </div>
                             )}
 
-                            {/* Footer with created date */}
-                            <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                              <div className="flex items-center gap-2 text-xs text-gray-500">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            {/* Date */}
+                            <div className="flex items-start gap-3 p-3 bg-white/60 rounded-lg border border-gray-100 hover:border-primary-200 transition-colors group/item">
+                              <div className="p-2 bg-gold-100 rounded-lg flex-shrink-0">
+                                <svg className="w-5 h-5 text-gold-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Datum</p>
+                                <p className="text-primary-800 font-semibold">
+                                  {new Date(apt.date).toLocaleDateString("nl-NL", {
+                                    weekday: "long",
+                                    year: "numeric",
+                                    month: "long",
+                                    day: "numeric",
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Time */}
+                            <div className="flex items-start gap-3 p-3 bg-white/60 rounded-lg border border-gray-100 hover:border-primary-200 transition-colors group/item">
+                              <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
+                                <svg className="w-5 h-5 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                <span>Aangemaakt: {new Date(apt.created_at).toLocaleString("nl-NL")}</span>
                               </div>
-                              {isPending && (
-                                <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded-full animate-pulse">
-                                  Actie vereist
-                                </span>
-                              )}
-                            </div>
-                  </div>
-                </div>
-
-                        {/* Right side - Actions */}
-                        {isPending && (
-                          <div className="flex flex-row sm:flex-col gap-3 lg:flex-shrink-0 lg:w-48 w-full sm:w-auto">
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        if (!processingIds.has(apt.id) && !processingRef.current.has(apt.id)) {
-                          handleApprove(apt.id)
-                        }
-                      }}
-                      disabled={processingIds.has(apt.id)}
-                      type="button"
-                              className="group/btn relative overflow-hidden px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-elegant hover:shadow-luxury transition-all duration-300 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                            >
-                              <span className="absolute inset-0 bg-gradient-to-r from-green-700 to-green-800 opacity-0 group-hover/btn:opacity-100 transition-opacity duration-300"></span>
-                              {processingIds.has(apt.id) ? (
-                                <span className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent relative z-10"></span>
-                              ) : (
-                                <svg className="w-5 h-5 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                </svg>
-                              )}
-                              <span className="relative z-10">{processingIds.has(apt.id) ? "Verwerken..." : "Goedkeuren"}</span>
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        if (!processingIds.has(apt.id) && !processingRef.current.has(apt.id)) {
-                          handleReject(apt.id)
-                        }
-                      }}
-                      disabled={processingIds.has(apt.id)}
-                      type="button"
-                              className="group/btn relative overflow-hidden px-6 py-3 bg-white border-2 border-red-300 text-red-700 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-red-50 hover:border-red-400 transition-all duration-300 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                    >
-                              {processingIds.has(apt.id) ? (
-                                <span className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-red-700 border-t-transparent"></span>
-                              ) : (
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              )}
-                              <span>{processingIds.has(apt.id) ? "Verwerken..." : "Afwijzen"}</span>
-                    </button>
-                          </div>
-                        )}
-
-                        {/* Status indicators for approved/rejected */}
-                        {(isApproved || isRejected) && (
-                          <div className="flex items-center justify-center lg:w-48">
-                            <div className={`p-4 rounded-xl ${
-                              isApproved ? "bg-green-50 border-2 border-green-200" : "bg-red-50 border-2 border-red-200"
-                            }`}>
-                              <div className="flex flex-col items-center gap-2">
-                                {isApproved ? (
-                                  <>
-                                    <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
-                                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                      </svg>
-                                    </div>
-                                    <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">Goedgekeurd</p>
-                                  </>
-                                ) : (
-                                  <>
-                                    <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center">
-                                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
-                                      </svg>
-                                    </div>
-                                    <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Afgewezen</p>
-                                  </>
-                                )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Tijd</p>
+                                <p className="text-primary-800 font-semibold text-lg">{apt.time}</p>
                               </div>
                             </div>
                           </div>
-                        )}
+
+                          {/* Message */}
+                          {apt.message && (
+                            <div className="mb-4 p-4 bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-200 shadow-sm">
+                              <div className="flex items-center gap-2 mb-2">
+                                <svg className="w-4 h-4 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                                </svg>
+                                <p className="text-xs font-semibold text-primary-800 uppercase tracking-wide">Bericht</p>
+                              </div>
+                              <p className="text-sm text-body break-words leading-relaxed">{apt.message}</p>
+                            </div>
+                          )}
+
+                          {/* Footer with created date */}
+                          <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span>Aangemaakt: {new Date(apt.created_at).toLocaleString("nl-NL")}</span>
+                            </div>
+                            {isPending && (
+                              <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-semibold rounded-full animate-pulse">
+                                Actie vereist
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
+
+                      {/* Right side - Actions */}
+                      {isPending && (
+                        <div className="flex flex-row sm:flex-col gap-3 lg:flex-shrink-0 lg:w-48 w-full sm:w-auto">
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              if (!processingIds.has(apt.id) && !processingRef.current.has(apt.id)) {
+                                handleApprove(apt.id)
+                              }
+                            }}
+                            disabled={processingIds.has(apt.id)}
+                            type="button"
+                            className="group/btn relative overflow-hidden px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-elegant hover:shadow-luxury transition-all duration-300 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                          >
+                            <span className="absolute inset-0 bg-gradient-to-r from-green-700 to-green-800 opacity-0 group-hover/btn:opacity-100 transition-opacity duration-300"></span>
+                            {processingIds.has(apt.id) ? (
+                              <span className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent relative z-10"></span>
+                            ) : (
+                              <svg className="w-5 h-5 relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                            <span className="relative z-10">{processingIds.has(apt.id) ? "Verwerken..." : "Goedkeuren"}</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              if (!processingIds.has(apt.id) && !processingRef.current.has(apt.id)) {
+                                handleReject(apt.id)
+                              }
+                            }}
+                            disabled={processingIds.has(apt.id)}
+                            type="button"
+                            className="group/btn relative overflow-hidden px-6 py-3 bg-white border-2 border-red-300 text-red-700 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-red-50 hover:border-red-400 transition-all duration-300 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                          >
+                            {processingIds.has(apt.id) ? (
+                              <span className="inline-block animate-spin rounded-full h-5 w-5 border-2 border-red-700 border-t-transparent"></span>
+                            ) : (
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            )}
+                            <span>{processingIds.has(apt.id) ? "Verwerken..." : "Afwijzen"}</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              handleDelete(apt.id)
+                            }}
+                            disabled={processingIds.has(apt.id)}
+                            type="button"
+                            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-semibold text-xs flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {processingIds.has(apt.id) ? (
+                              <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></span>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                Verwijderen
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Status indicators for approved/rejected */}
+                      {(isApproved || isRejected) && (
+                        <div className="flex flex-col items-center justify-center lg:w-48 gap-3">
+                          <div className={`p-4 rounded-xl ${
+                            isApproved ? "bg-green-50 border-2 border-green-200" : "bg-red-50 border-2 border-red-200"
+                          }`}>
+                            <div className="flex flex-col items-center gap-2">
+                              {isApproved ? (
+                                <>
+                                  <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
+                                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  </div>
+                                  <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">Goedgekeurd</p>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center">
+                                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </div>
+                                  <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Afgewezen</p>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          {/* Delete button for approved/rejected */}
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              handleDelete(apt.id)
+                            }}
+                            disabled={processingIds.has(apt.id)}
+                            type="button"
+                            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold text-xs flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {processingIds.has(apt.id) ? (
+                              <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></span>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                Verwijderen
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
-                )
-              })}
-            </div>
-          )}
+                </div>
+              )
+            }
 
-          {appointments.length > 0 && (
-            <div className="mt-6 flex items-center justify-center">
-              <button onClick={toggleSelectAll} className="text-sm text-primary-600 hover:text-primary-800 font-medium flex items-center gap-2">
-                {selectedIds.size === appointments.length ? (
-                  <>Alles deselecteren</>
+            // Get current tab appointments
+            const getCurrentTabAppointments = () => {
+              let appointments: Appointment[] = []
+              
+              switch (activeTab) {
+                case "pending":
+                  appointments = [...appointmentsByStatus.pending]
+                  break
+                case "approved":
+                  appointments = [...appointmentsByStatus.approved]
+                  break
+                case "rejected":
+                  appointments = [...appointmentsByStatus.rejected]
+                  break
+                default:
+                  return filteredAndSortedAppointments
+              }
+
+              // Apply sorting to tab appointments
+              appointments.sort((a, b) => {
+                switch (sortBy) {
+                  case "newest":
+                    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                  case "oldest":
+                    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                  case "date-asc":
+                    return a.date.localeCompare(b.date) || a.time.localeCompare(b.time)
+                  case "date-desc":
+                    return b.date.localeCompare(a.date) || b.time.localeCompare(a.time)
+                  case "name-asc":
+                    return a.name.localeCompare(b.name)
+                  case "name-desc":
+                    return b.name.localeCompare(a.name)
+                  default:
+                    return 0
+                }
+              })
+
+              return appointments
+            }
+
+            const currentAppointments = getCurrentTabAppointments()
+
+            return (
+              <>
+                {/* Tabs */}
+                <div className="mb-6 border-b border-gray-200">
+                  <nav className="flex flex-wrap gap-2 -mb-px" aria-label="Tabs">
+                    <button
+                      onClick={() => {
+                        setActiveTab("all")
+                        setFilter("all") // Reset status filter when switching to "all" tab
+                      }}
+                      className={`px-4 py-3 font-semibold text-sm rounded-t-lg transition-all duration-200 flex items-center gap-2 ${
+                        activeTab === "all"
+                          ? "bg-primary-600 text-white border-b-2 border-primary-600"
+                          : "text-gray-600 hover:text-primary-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      <span>Alle</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${
+                        activeTab === "all" ? "bg-white/20 text-white" : "bg-gray-200 text-gray-700"
+                      }`}>
+                        {filteredAndSortedAppointments.length}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setActiveTab("pending")
+                        setFilter("all") // Reset status filter - tabs handle filtering
+                      }}
+                      className={`px-4 py-3 font-semibold text-sm rounded-t-lg transition-all duration-200 flex items-center gap-2 ${
+                        activeTab === "pending"
+                          ? "bg-yellow-500 text-white border-b-2 border-yellow-600"
+                          : "text-gray-600 hover:text-yellow-700 hover:bg-yellow-50"
+                      }`}
+                    >
+                      <span>In Afwachting</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${
+                        activeTab === "pending" ? "bg-white/20 text-white" : "bg-yellow-100 text-yellow-800"
+                      }`}>
+                        {appointmentsByStatus.pending.length}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setActiveTab("approved")
+                        setFilter("all") // Reset status filter - tabs handle filtering
+                      }}
+                      className={`px-4 py-3 font-semibold text-sm rounded-t-lg transition-all duration-200 flex items-center gap-2 ${
+                        activeTab === "approved"
+                          ? "bg-green-500 text-white border-b-2 border-green-600"
+                          : "text-gray-600 hover:text-green-700 hover:bg-green-50"
+                      }`}
+                    >
+                      <span>Goedgekeurd</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${
+                        activeTab === "approved" ? "bg-white/20 text-white" : "bg-green-100 text-green-800"
+                      }`}>
+                        {appointmentsByStatus.approved.length}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setActiveTab("rejected")
+                        setFilter("all") // Reset status filter - tabs handle filtering
+                      }}
+                      className={`px-4 py-3 font-semibold text-sm rounded-t-lg transition-all duration-200 flex items-center gap-2 ${
+                        activeTab === "rejected"
+                          ? "bg-red-500 text-white border-b-2 border-red-600"
+                          : "text-gray-600 hover:text-red-700 hover:bg-red-50"
+                      }`}
+                    >
+                      <span>Afgewezen</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${
+                        activeTab === "rejected" ? "bg-white/20 text-white" : "bg-red-100 text-red-800"
+                      }`}>
+                        {appointmentsByStatus.rejected.length}
+                      </span>
+                    </button>
+                  </nav>
+                </div>
+
+                {/* Tab Content */}
+                {currentAppointments.length === 0 ? (
+                  <div className="text-center py-20 luxury-card">
+                    <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    <p className="text-lg font-semibold text-primary-800 mb-2">
+                      Geen {activeTab === "all" ? "" : activeTab === "pending" ? "in afwachting" : activeTab === "approved" ? "goedgekeurde" : "afgewezen"} afspraken
+                    </p>
+                    <p className="text-body text-sm">Probeer andere filters of tabs</p>
+                  </div>
                 ) : (
-                  <>Alles selecteren</>
+                  <div className="space-y-4">
+                    {currentAppointments.map((apt, index) => renderCard(apt, index))}
+                  </div>
                 )}
-              </button>
-            </div>
-          )}
+              </>
+            )
+          })()}
+          </div>
+        )}
+
+          {(() => {
+            const getCurrentTabAppointments = () => {
+              switch (activeTab) {
+                case "pending":
+                  return appointmentsByStatus.pending
+                case "approved":
+                  return appointmentsByStatus.approved
+                case "rejected":
+                  return appointmentsByStatus.rejected
+                default:
+                  return filteredAndSortedAppointments
+              }
+            }
+            const currentTabAppointments = getCurrentTabAppointments()
+            const allCurrentSelected = currentTabAppointments.length > 0 && 
+              currentTabAppointments.every(apt => selectedIds.has(apt.id))
+
+            return currentTabAppointments.length > 0 ? (
+              <div className="mt-6 flex items-center justify-center">
+                <button 
+                  onClick={() => {
+                    if (allCurrentSelected) {
+                      setSelectedIds(new Set())
+                      setShowBulkActions(false)
+                    } else {
+                      const newSelected = new Set(selectedIds)
+                      currentTabAppointments.forEach(apt => newSelected.add(apt.id))
+                      setSelectedIds(newSelected)
+                      setShowBulkActions(newSelected.size > 0)
+                    }
+                  }} 
+                  className="text-sm text-primary-600 hover:text-primary-800 font-medium flex items-center gap-2"
+                >
+                  {allCurrentSelected ? (
+                    <>Alles deselecteren ({currentTabAppointments.length})</>
+                  ) : (
+                    <>Alles selecteren ({currentTabAppointments.length})</>
+                  )}
+                </button>
+              </div>
+            ) : null
+          })()}
         </main>
         </div>
     </div>
