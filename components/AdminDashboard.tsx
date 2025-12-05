@@ -72,29 +72,6 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     fetchAppointments()
   }, [])
 
-  // Smart date range filter
-  const getDateRangeFilter = () => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    
-    switch (dateRange) {
-      case "today":
-        return today.toISOString().split("T")[0]
-      case "week": {
-        const weekAgo = new Date(today)
-        weekAgo.setDate(weekAgo.getDate() - 7)
-        return weekAgo.toISOString().split("T")[0]
-      }
-      case "month": {
-        const monthAgo = new Date(today)
-        monthAgo.setMonth(monthAgo.getMonth() - 1)
-        return monthAgo.toISOString().split("T")[0]
-      }
-      default:
-        return null
-    }
-  }
-
   // Filter and sort appointments
   const filteredAndSortedAppointments = useMemo(() => {
     let filtered = [...allAppointments]
@@ -104,7 +81,29 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       filtered = filtered.filter(a => a.status === filter)
     }
 
-    // Date range filter (smart)
+    // Date range filter (smart) - inline function to avoid dependency issues
+    const getDateRangeFilter = () => {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      
+      switch (dateRange) {
+        case "today":
+          return today.toISOString().split("T")[0]
+        case "week": {
+          const weekAgo = new Date(today)
+          weekAgo.setDate(weekAgo.getDate() - 7)
+          return weekAgo.toISOString().split("T")[0]
+        }
+        case "month": {
+          const monthAgo = new Date(today)
+          monthAgo.setMonth(monthAgo.getMonth() - 1)
+          return monthAgo.toISOString().split("T")[0]
+        }
+        default:
+          return null
+      }
+    }
+    
     const dateRangeStart = getDateRangeFilter()
     if (dateRangeStart && dateRange !== "all") {
       filtered = filtered.filter(a => {
@@ -166,7 +165,29 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     // Apply all filters except status filter for tab counts
     let filtered = [...allAppointments]
 
-    // Date range filter
+    // Date range filter - inline function to avoid dependency issues
+    const getDateRangeFilter = () => {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      
+      switch (dateRange) {
+        case "today":
+          return today.toISOString().split("T")[0]
+        case "week": {
+          const weekAgo = new Date(today)
+          weekAgo.setDate(weekAgo.getDate() - 7)
+          return weekAgo.toISOString().split("T")[0]
+        }
+        case "month": {
+          const monthAgo = new Date(today)
+          monthAgo.setMonth(monthAgo.getMonth() - 1)
+          return monthAgo.toISOString().split("T")[0]
+        }
+        default:
+          return null
+      }
+    }
+    
     const dateRangeStart = getDateRangeFilter()
     if (dateRangeStart && dateRange !== "all") {
       filtered = filtered.filter(a => {
@@ -792,7 +813,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   )}
                   {searchQuery && (
                     <span className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium flex items-center gap-1.5">
-                      Zoek: "{searchQuery}"
+                      Zoek: &quot;{searchQuery}&quot;
                       <button onClick={() => setSearchQuery("")} className="hover:text-blue-900">
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
