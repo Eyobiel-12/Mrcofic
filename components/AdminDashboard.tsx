@@ -154,6 +154,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     })
 
     return filtered
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allAppointments, filter, dateFilter, dateRange, searchQuery, sortBy])
 
   useEffect(() => {
@@ -223,6 +224,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     const approved = filtered.filter(a => a.status === "approved")
     const rejected = filtered.filter(a => a.status === "rejected")
     return { pending, approved, rejected }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allAppointments, dateFilter, dateRange, searchQuery])
 
   // Reset date range when specific date is selected
