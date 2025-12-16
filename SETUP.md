@@ -130,3 +130,6 @@ Open [http://localhost:3000](http://localhost:3000)
 - Verifieer dat alle template variabelen correct zijn
 - Check server logs voor specifieke errors
 
+
+
+

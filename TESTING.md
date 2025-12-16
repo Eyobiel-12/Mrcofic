@@ -92,3 +92,6 @@ Na succesvolle tests:
 3. ⚠️ Deploy naar Vercel
 4. ⚠️ RLS inschakelen (optioneel, voor extra beveiliging)
 
+
+
+

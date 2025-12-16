@@ -72,3 +72,6 @@ Dit komt waarschijnlijk door een **Auto-Reply** of **Trigger** in EmailJS die au
 3. Beide templates zijn gekoppeld aan dezelfde service
 4. Er is een webhook of integration die beide emails verstuurt
 
+
+
+

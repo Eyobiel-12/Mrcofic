@@ -97,3 +97,6 @@ Zorg dat deze variabelen in je template content staan:
 3. Check dat je Gmail account actief is
 4. Probeer een andere email service (SendGrid, etc.) als test
 
+
+
+

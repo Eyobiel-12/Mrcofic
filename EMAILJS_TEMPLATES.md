@@ -122,3 +122,6 @@ Gebruik de test pagina: http://localhost:3000/test-email
 - Kopieer de Template ID opnieuw uit EmailJS dashboard
 - Check dat het de juiste template is (niet de admin template)
 
+
+
+

@@ -92,3 +92,6 @@ Na migratie, controleer:
 - ✅ Check constraint voor status waarden
 - ✅ UUID extension voor primary keys
 
+
+
+

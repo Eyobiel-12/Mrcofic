@@ -115,37 +115,114 @@ export async function POST(req: Request) {
       )
     }
 
-    // Stuur admin-notificatie via EmailJS REST API (server-side)
+    // Stuur admin-notificatie via Resend API
     try {
-      const emailPayload: any = {
-        service_id: process.env.EMAILJS_SERVICE_ID,
-        template_id: process.env.EMAILJS_TEMPLATE_ID_ADMIN,
-        user_id: process.env.EMAILJS_USER_ID, // Public Key
-        template_params: {
-          to_email: process.env.ADMIN_NOTIFICATION_EMAIL,
-          name: data.name,
-          email: data.email,
-          phone: data.phone || "",
-          date: data.date,
-          time: data.time,
-          message: data.message || "",
-          admin_link: `${process.env.APP_BASE_URL}/admin`,
-        },
-      }
+      const resendApiKey = process.env.RESEND_API_KEY
+      const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL
       
-      // Add private key as accessToken for server-side API calls
-      if (process.env.EMAILJS_PRIVATE_KEY) {
-        emailPayload.accessToken = process.env.EMAILJS_PRIVATE_KEY
+      if (!adminEmail) {
+        console.warn("⚠️ ADMIN_NOTIFICATION_EMAIL not set, skipping admin notification")
+      } else if (!resendApiKey) {
+        console.warn("⚠️ RESEND_API_KEY not set, skipping admin notification")
+      } else {
+        console.log("📧 Sending new booking notification to admin via Resend:", adminEmail)
+        
+        const adminLink = `${process.env.APP_BASE_URL || "http://localhost:3000"}/admin`
+        
+        // HTML email template for admin notification
+        const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nieuwe Afspraak</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+    <h1 style="color: #2c3e50; margin-top: 0;">Nieuwe Afspraak Aanvraag</h1>
+  </div>
+  
+  <div style="background-color: #ffffff; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+    <p style="font-size: 16px; margin-top: 0;">Er is een nieuwe afspraak aanvraag binnengekomen:</p>
+    
+    <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+      <tr>
+        <td style="padding: 10px; background-color: #f8f9fa; font-weight: bold; border: 1px solid #e0e0e0;">Naam:</td>
+        <td style="padding: 10px; border: 1px solid #e0e0e0;">${data.name}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px; background-color: #f8f9fa; font-weight: bold; border: 1px solid #e0e0e0;">Email:</td>
+        <td style="padding: 10px; border: 1px solid #e0e0e0;"><a href="mailto:${data.email}" style="color: #3498db;">${data.email}</a></td>
+      </tr>
+      ${data.phone ? `
+      <tr>
+        <td style="padding: 10px; background-color: #f8f9fa; font-weight: bold; border: 1px solid #e0e0e0;">Telefoon:</td>
+        <td style="padding: 10px; border: 1px solid #e0e0e0;"><a href="tel:${data.phone}" style="color: #3498db;">${data.phone}</a></td>
+      </tr>
+      ` : ''}
+      <tr>
+        <td style="padding: 10px; background-color: #f8f9fa; font-weight: bold; border: 1px solid #e0e0e0;">Datum:</td>
+        <td style="padding: 10px; border: 1px solid #e0e0e0;">${data.date}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px; background-color: #f8f9fa; font-weight: bold; border: 1px solid #e0e0e0;">Tijd:</td>
+        <td style="padding: 10px; border: 1px solid #e0e0e0;">${data.time}</td>
+      </tr>
+      ${data.message ? `
+      <tr>
+        <td style="padding: 10px; background-color: #f8f9fa; font-weight: bold; border: 1px solid #e0e0e0; vertical-align: top;">Bericht:</td>
+        <td style="padding: 10px; border: 1px solid #e0e0e0;">${data.message.replace(/\n/g, '<br>')}</td>
+      </tr>
+      ` : ''}
+    </table>
+    
+    <div style="margin-top: 30px; text-align: center;">
+      <a href="${adminLink}" style="display: inline-block; background-color: #3498db; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">Beheer Afspraken</a>
+    </div>
+  </div>
+  
+  <div style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 8px; font-size: 12px; color: #666;">
+    <p style="margin: 0;">Dit is een automatische notificatie van het MARCOFIC boekingssysteem.</p>
+  </div>
+</body>
+</html>
+        `.trim()
+        
+        const resendPayload = {
+          from: process.env.RESEND_FROM_EMAIL || "marcoficweb@gmail.com",
+          to: [adminEmail],
+          subject: "Nieuwe Afspraak Aanvraag - " + data.name,
+          html: htmlContent,
+        }
+        
+        const emailResponse = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${resendApiKey}`,
+          },
+          body: JSON.stringify(resendPayload),
+        })
+        
+        const responseText = await emailResponse.text()
+        let emailResult: any
+        
+        try {
+          emailResult = JSON.parse(responseText)
+        } catch (e) {
+          emailResult = { text: responseText, raw: responseText }
+        }
+        
+        if (emailResponse.ok) {
+          console.log("✅ Admin notification email sent successfully via Resend")
+        } else {
+          console.error("❌ Resend admin notification failed:", emailResponse.status, emailResult)
+        }
       }
-      
-      await fetch("https://api.emailjs.com/api/v1.0/email/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(emailPayload),
-      })
     } catch (e) {
       // Log error but don't fail booking
-      console.error("EmailJS admin notify failed:", e)
+      console.error("❌ Resend admin notify error:", e)
     }
 
     return new Response(

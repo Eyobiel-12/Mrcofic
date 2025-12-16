@@ -34,3 +34,6 @@ COMMENT ON TABLE appointments IS 'Stores all appointment bookings';
 COMMENT ON COLUMN appointments.status IS 'pending: waiting for admin approval, approved: confirmed by admin, rejected: declined by admin';
 COMMENT ON COLUMN appointments.time IS 'Time slot in format HH:MM-HH:MM (e.g., 11:00-11:30)';
 
+
+
+

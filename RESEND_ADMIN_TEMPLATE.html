@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nieuwe Afspraak</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+    <h1 style="color: #2c3e50; margin-top: 0;">Nieuwe Afspraak Aanvraag</h1>
+  </div>
+  
+  <div style="background-color: #ffffff; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+    <p style="font-size: 16px; margin-top: 0;">Er is een nieuwe afspraak aanvraag binnengekomen:</p>
+    
+    <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+      <tr>
+        <td style="padding: 10px; background-color: #f8f9fa; font-weight: bold; border: 1px solid #e0e0e0;">Naam:</td>
+        <td style="padding: 10px; border: 1px solid #e0e0e0;">{{name}}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px; background-color: #f8f9fa; font-weight: bold; border: 1px solid #e0e0e0;">Email:</td>
+        <td style="padding: 10px; border: 1px solid #e0e0e0;"><a href="mailto:{{email}}" style="color: #3498db;">{{email}}</a></td>
+      </tr>
+      <tr>
+        <td style="padding: 10px; background-color: #f8f9fa; font-weight: bold; border: 1px solid #e0e0e0;">Telefoon:</td>
+        <td style="padding: 10px; border: 1px solid #e0e0e0;"><a href="tel:{{phone}}" style="color: #3498db;">{{phone}}</a></td>
+      </tr>
+      <tr>
+        <td style="padding: 10px; background-color: #f8f9fa; font-weight: bold; border: 1px solid #e0e0e0;">Datum:</td>
+        <td style="padding: 10px; border: 1px solid #e0e0e0;">{{date}}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px; background-color: #f8f9fa; font-weight: bold; border: 1px solid #e0e0e0;">Tijd:</td>
+        <td style="padding: 10px; border: 1px solid #e0e0e0;">{{time}}</td>
+      </tr>
+      <tr>
+        <td style="padding: 10px; background-color: #f8f9fa; font-weight: bold; border: 1px solid #e0e0e0; vertical-align: top;">Bericht:</td>
+        <td style="padding: 10px; border: 1px solid #e0e0e0;">{{message}}</td>
+      </tr>
+    </table>
+    
+    <div style="margin-top: 30px; text-align: center;">
+      <a href="{{admin_link}}" style="display: inline-block; background-color: #3498db; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">Beheer Afspraken</a>
+    </div>
+  </div>
+  
+  <div style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border-radius: 8px; font-size: 12px; color: #666;">
+    <p style="margin: 0;">Dit is een automatische notificatie van het MARCOFIC boekingssysteem.</p>
+  </div>
+</body>
+</html>
+

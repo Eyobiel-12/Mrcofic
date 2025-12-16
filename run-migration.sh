@@ -49,3 +49,6 @@ EOF
 echo ""
 echo "✅ Migratie voltooid!"
 
+
+
+

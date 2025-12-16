@@ -71,3 +71,6 @@ FOR ALL USING (true) WITH CHECK (true);
 - [ ] EmailJS templates zijn aangemaakt
 - [ ] E-mail notificaties werken
 
+
+
+

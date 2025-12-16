@@ -76,3 +76,6 @@ Open [http://localhost:3000](http://localhost:3000)
 - **Email errors**: Verifieer EmailJS template IDs en service config
 - **Build errors**: Check alle environment variables zijn ingesteld
 
+
+
+

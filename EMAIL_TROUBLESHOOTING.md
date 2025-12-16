@@ -140,3 +140,6 @@ npm run dev
 4. Test template direct in EmailJS dashboard
 5. Verifieer alle IDs opnieuw in EmailJS dashboard
 
+
+
+

@@ -87,3 +87,6 @@ Als je `{{to_email}}` correct hebt ingesteld:
 - ✅ Status 200 in plaats van 422
 - ✅ Email komt aan in inbox
 
+
+
+

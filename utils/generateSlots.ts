@@ -17,3 +17,6 @@ export function generateTimeSlots(open: string, close: string): string[] {
   return slots
 }
 
+
+
+

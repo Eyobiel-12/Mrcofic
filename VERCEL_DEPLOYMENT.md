@@ -106,3 +106,6 @@ git push origin main
 - Gebruik Vercel's environment variables, niet `.env.local` in productie
 - Check regelmatig EmailJS logs voor verdachte activiteit
 
+
+
+

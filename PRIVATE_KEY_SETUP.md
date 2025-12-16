@@ -70,3 +70,6 @@ Als alles werkt, zie je:
 - ✅ Email in je inbox (check spam folder)
 - ✅ EmailJS Dashboard → Events toont verzonden email
 
+
+
+
