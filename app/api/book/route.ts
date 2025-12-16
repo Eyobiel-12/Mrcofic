@@ -189,12 +189,17 @@ export async function POST(req: Request) {
 </html>
         `.trim()
         
+        // Use onboarding@resend.dev if domain not verified, otherwise use configured email
+        const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev"
+        
         const resendPayload = {
-          from: process.env.RESEND_FROM_EMAIL || "marcoficweb@gmail.com",
+          from: fromEmail,
           to: [adminEmail],
           subject: "Nieuwe Afspraak Aanvraag - " + data.name,
           html: htmlContent,
         }
+        
+        console.log("📧 Resend Payload:", JSON.stringify(resendPayload, null, 2))
         
         const emailResponse = await fetch("https://api.resend.com/emails", {
           method: "POST",
@@ -214,10 +219,17 @@ export async function POST(req: Request) {
           emailResult = { text: responseText, raw: responseText }
         }
         
+        console.log("📧 Resend Response Status:", emailResponse.status)
+        console.log("📧 Resend Response:", JSON.stringify(emailResult, null, 2))
+        
         if (emailResponse.ok) {
           console.log("✅ Admin notification email sent successfully via Resend")
+          console.log("📧 Email ID:", emailResult?.id)
         } else {
           console.error("❌ Resend admin notification failed:", emailResponse.status, emailResult)
+          if (emailResult?.message) {
+            console.error("❌ Error message:", emailResult.message)
+          }
         }
       }
     } catch (e) {
