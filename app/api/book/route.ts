@@ -117,8 +117,8 @@ export async function POST(req: Request) {
 
     // Stuur admin-notificatie via Resend API
     try {
-      const resendApiKey = process.env.RESEND_API_KEY
       const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL
+      const resendApiKey = process.env.RESEND_API_KEY
       
       if (!adminEmail) {
         console.warn("⚠️ ADMIN_NOTIFICATION_EMAIL not set, skipping admin notification")
@@ -189,17 +189,17 @@ export async function POST(req: Request) {
 </html>
         `.trim()
         
-        // Use onboarding@resend.dev if domain not verified, otherwise use configured email
+        const subject = "Nieuwe Afspraak Aanvraag - " + data.name
         const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev"
         
         const resendPayload = {
           from: fromEmail,
           to: [adminEmail],
-          subject: "Nieuwe Afspraak Aanvraag - " + data.name,
+          subject: subject,
           html: htmlContent,
         }
         
-        console.log("📧 Resend Payload:", JSON.stringify(resendPayload, null, 2))
+        console.log("📧 Resend Payload:", JSON.stringify({ ...resendPayload, html: "[HTML content]" }, null, 2))
         
         const emailResponse = await fetch("https://api.resend.com/emails", {
           method: "POST",
@@ -229,6 +229,9 @@ export async function POST(req: Request) {
           console.error("❌ Resend admin notification failed:", emailResponse.status, emailResult)
           if (emailResult?.message) {
             console.error("❌ Error message:", emailResult.message)
+            if (emailResponse.status === 403 && emailResult?.message?.includes("testing emails")) {
+              console.error("⚠️ Resend domain not verified. See RESEND_DOMAIN_SETUP.md for instructions.")
+            }
           }
         }
       }
