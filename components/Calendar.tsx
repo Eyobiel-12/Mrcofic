@@ -17,7 +17,7 @@ export default function Calendar({ selectedDate, onDateSelect, minDate }: Calend
   const min = minDate ? new Date(minDate) : today
 
   // Fetch blocked dates
-  useEffect(() => {
+  const fetchBlockedDates = () => {
     fetch("/api/admin/block-date")
       .then((res) => res.json())
       .then((data: Array<{ date: string }>) => {
@@ -25,6 +25,23 @@ export default function Calendar({ selectedDate, onDateSelect, minDate }: Calend
         setBlockedDates(blockedSet)
       })
       .catch((err) => console.error("Failed to fetch blocked dates:", err))
+  }
+
+  useEffect(() => {
+    fetchBlockedDates()
+    // Refresh blocked dates every 30 seconds to catch new blocks
+    const interval = setInterval(fetchBlockedDates, 30000)
+    
+    // Also refresh when window regains focus (user comes back to tab)
+    const handleFocus = () => {
+      fetchBlockedDates()
+    }
+    window.addEventListener('focus', handleFocus)
+    
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', handleFocus)
+    }
   }, [])
 
   const getDaysInMonth = (date: Date) => {

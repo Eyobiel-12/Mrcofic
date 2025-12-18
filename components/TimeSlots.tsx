@@ -24,16 +24,23 @@ export default function TimeSlots({ date, onSelect, selectedTime }: TimeSlotsPro
     }
 
     setLoading(true)
+    
     // Check if date is blocked
-    fetch("/api/admin/block-date")
-      .then((r) => r.json())
-      .then((blockedDates) => {
-        const blocked = blockedDates.some((d: { date: string }) => d.date === date)
-        setIsDateBlocked(blocked)
-      })
-      .catch((err) => {
-        console.error("Failed to fetch blocked dates:", err)
-      })
+    const checkBlocked = () => {
+      fetch("/api/admin/block-date")
+        .then((r) => r.json())
+        .then((blockedDates) => {
+          const blocked = blockedDates.some((d: { date: string }) => d.date === date)
+          setIsDateBlocked(blocked)
+        })
+        .catch((err) => {
+          console.error("Failed to fetch blocked dates:", err)
+        })
+    }
+
+    checkBlocked()
+    // Refresh blocked status every 10 seconds when date is selected
+    const blockedInterval = setInterval(checkBlocked, 10000)
 
     // Fetch appointments
     fetch(`/api/appointments?date=${date}`)
@@ -48,6 +55,8 @@ export default function TimeSlots({ date, onSelect, selectedTime }: TimeSlotsPro
         console.error("Failed to fetch appointments:", err)
       })
       .finally(() => setLoading(false))
+
+    return () => clearInterval(blockedInterval)
   }, [date])
 
   if (!date) {
