@@ -42,6 +42,9 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [blockedDates, setBlockedDates] = useState<Array<{ id: string; date: string; reason: string | null; created_at: string }>>([])
   const [showDateManager, setShowDateManager] = useState(false)
   const [blockDateInput, setBlockDateInput] = useState("")
+  const [blockDateRangeStart, setBlockDateRangeStart] = useState("")
+  const [blockDateRangeEnd, setBlockDateRangeEnd] = useState("")
+  const [blockMode, setBlockMode] = useState<"single" | "range">("single")
   const [blockReasonInput, setBlockReasonInput] = useState("")
   const [loadingDates, setLoadingDates] = useState(false)
   
@@ -114,34 +117,76 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   }
 
   const handleBlockDate = async () => {
-    if (!blockDateInput) {
-      alert("Selecteer een datum")
+    let datesToBlock: string[] = []
+
+    if (blockMode === "single") {
+      if (!blockDateInput) {
+        showToast("Selecteer een datum", "warning")
+        return
+      }
+      datesToBlock = [blockDateInput]
+    } else {
+      if (!blockDateRangeStart || !blockDateRangeEnd) {
+        showToast("Selecteer een start- en einddatum", "warning")
+        return
+      }
+      
+      const start = new Date(blockDateRangeStart)
+      const end = new Date(blockDateRangeEnd)
+      
+      if (start > end) {
+        showToast("Startdatum moet voor einddatum zijn", "error")
+        return
+      }
+      
+      // Generate all dates in range
+      const current = new Date(start)
+      while (current <= end) {
+        datesToBlock.push(current.toISOString().split('T')[0])
+        current.setDate(current.getDate() + 1)
+      }
+    }
+
+    if (datesToBlock.length === 0) {
+      showToast("Geen datums geselecteerd", "warning")
       return
     }
 
     setLoadingDates(true)
     try {
-      const response = await fetch("/api/admin/block-date", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date: blockDateInput,
-          reason: blockReasonInput || null,
-        }),
-      })
+      // Block all dates
+      const promises = datesToBlock.map(date => 
+        fetch("/api/admin/block-date", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            date,
+            reason: blockReasonInput || null,
+          }),
+        })
+      )
 
-      if (response.ok) {
-        setBlockDateInput("")
-        setBlockReasonInput("")
-        fetchBlockedDates()
-        showToast("Datum geblokkeerd", "success")
+      const results = await Promise.all(promises)
+      const successCount = results.filter(r => r.ok).length
+      const failedCount = results.length - successCount
+
+      // Clear inputs
+      setBlockDateInput("")
+      setBlockDateRangeStart("")
+      setBlockDateRangeEnd("")
+      setBlockReasonInput("")
+      
+      // Refresh blocked dates
+      fetchBlockedDates()
+
+      if (failedCount === 0) {
+        showToast(`${successCount} datum${successCount > 1 ? 'en' : ''} geblokkeerd`, "success")
       } else {
-        const data = await response.json()
-        showToast(data.error || "Fout bij blokkeren van datum", "error")
+        showToast(`${successCount} geblokkeerd, ${failedCount} mislukt (mogelijk al geblokkeerd)`, "warning")
       }
     } catch (err) {
       console.error("Block date error:", err)
-      showToast("Fout bij blokkeren van datum", "error")
+      showToast("Fout bij blokkeren van datums", "error")
     } finally {
       setLoadingDates(false)
     }
@@ -1133,18 +1178,68 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               
               {/* Block Date Form */}
               <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-800 mb-3">Nieuwe Datum Blokkeren</h3>
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">Nieuwe Datum(s) Blokkeren</h3>
+                
+                {/* Mode Selector */}
+                <div className="mb-4 flex gap-2">
+                  <button
+                    onClick={() => setBlockMode("single")}
+                    className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
+                      blockMode === "single"
+                        ? "bg-primary-600 text-white shadow-md"
+                        : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    Enkele Datum
+                  </button>
+                  <button
+                    onClick={() => setBlockMode("range")}
+                    className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
+                      blockMode === "range"
+                        ? "bg-primary-600 text-white shadow-md"
+                        : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    Datum Bereik
+                  </button>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Datum</label>
-                    <input
-                      type="date"
-                      value={blockDateInput}
-                      onChange={(e) => setBlockDateInput(e.target.value)}
-                      min={new Date().toISOString().split('T')[0]}
-                      className="input-modern py-2 w-full"
-                    />
-                  </div>
+                  {blockMode === "single" ? (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Datum</label>
+                      <input
+                        type="date"
+                        value={blockDateInput}
+                        onChange={(e) => setBlockDateInput(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                        className="input-modern py-2 w-full"
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">Van Datum</label>
+                        <input
+                          type="date"
+                          value={blockDateRangeStart}
+                          onChange={(e) => setBlockDateRangeStart(e.target.value)}
+                          min={new Date().toISOString().split('T')[0]}
+                          className="input-modern py-2 w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">Tot Datum</label>
+                        <input
+                          type="date"
+                          value={blockDateRangeEnd}
+                          onChange={(e) => setBlockDateRangeEnd(e.target.value)}
+                          min={blockDateRangeStart || new Date().toISOString().split('T')[0]}
+                          className="input-modern py-2 w-full"
+                        />
+                      </div>
+                    </>
+                  )}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1">Reden (optioneel)</label>
                     <input
@@ -1156,9 +1251,18 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     />
                   </div>
                 </div>
+                
+                {blockMode === "range" && blockDateRangeStart && blockDateRangeEnd && (
+                  <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      <strong>Info:</strong> Alle datums van {new Date(blockDateRangeStart).toLocaleDateString("nl-NL")} tot {new Date(blockDateRangeEnd).toLocaleDateString("nl-NL")} zullen worden geblokkeerd.
+                    </p>
+                  </div>
+                )}
+                
                 <button
                   onClick={handleBlockDate}
-                  disabled={loadingDates || !blockDateInput}
+                  disabled={loadingDates || (blockMode === "single" ? !blockDateInput : (!blockDateRangeStart || !blockDateRangeEnd))}
                   className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {loadingDates ? (
