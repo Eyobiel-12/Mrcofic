@@ -1477,10 +1477,16 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             }
 
             // Get current tab appointments
-            const getCurrentTabAppointments = () => {
+            const getCurrentTabAppointments = (): Appointment[] => {
+              const tab = activeTab as "pending" | "approved" | "rejected" | "all" | "dates"
+              
+              if (tab === "dates") {
+                return [] // Dates tab has its own content
+              }
+              
               let appointments: Appointment[] = []
               
-              switch (activeTab) {
+              switch (tab) {
                 case "pending":
                   appointments = [...appointmentsByStatus.pending]
                   break
@@ -1490,8 +1496,6 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 case "rejected":
                   appointments = [...appointmentsByStatus.rejected]
                   break
-                case "dates":
-                  return [] // Dates tab has its own content
                 default:
                   return filteredAndSortedAppointments
               }
@@ -1545,16 +1549,20 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         )}
 
           {(() => {
-            const getCurrentTabAppointments = () => {
-              switch (activeTab) {
+            const getCurrentTabAppointments = (): Appointment[] => {
+              const tab = activeTab as "pending" | "approved" | "rejected" | "all" | "dates"
+              
+              if (tab === "dates") {
+                return [] // Dates tab has its own content
+              }
+              
+              switch (tab) {
                 case "pending":
                   return appointmentsByStatus.pending
                 case "approved":
                   return appointmentsByStatus.approved
                 case "rejected":
                   return appointmentsByStatus.rejected
-                case "dates":
-                  return [] // Dates tab has its own content
                 default:
                   return filteredAndSortedAppointments
               }
@@ -1588,8 +1596,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               </div>
             ) : null
           })()}
+            </>
+          )}
         </main>
-        </div>
+      </div>
     </div>
   )
 }

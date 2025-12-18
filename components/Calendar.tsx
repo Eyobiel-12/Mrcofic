@@ -20,8 +20,8 @@ export default function Calendar({ selectedDate, onDateSelect, minDate }: Calend
   useEffect(() => {
     fetch("/api/admin/block-date")
       .then((res) => res.json())
-      .then((data) => {
-        const blockedSet = new Set(data.map((d: { date: string }) => d.date))
+      .then((data: Array<{ date: string }>) => {
+        const blockedSet = new Set<string>(data.map((d) => d.date))
         setBlockedDates(blockedSet)
       })
       .catch((err) => console.error("Failed to fetch blocked dates:", err))
@@ -259,7 +259,6 @@ export default function Calendar({ selectedDate, onDateSelect, minDate }: Calend
               key={day}
               onClick={() => handleDateClick(day)}
               disabled={disabled}
-              title={`${dayName}, ${dateStr}`}
               className={`
                 aspect-square rounded-lg font-semibold text-sm transition-all duration-300
                 relative group
