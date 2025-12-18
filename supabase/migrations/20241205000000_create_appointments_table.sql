@@ -45,3 +45,4 @@ comment on column appointments.time is 'Time slot in format HH:MM-HH:MM (e.g., 1
 
 
 
+

@@ -61,3 +61,4 @@ ADMIN_NOTIFICATION_EMAIL=marcoficweb@gmail.com  # Je verified Resend email
 
 Als je geen domain wilt verifiëren, gebruik dan `marcoficweb@gmail.com` als `ADMIN_NOTIFICATION_EMAIL` voor zowel development als productie.
 
+

@@ -14,14 +14,28 @@ export default function TimeSlots({ date, onSelect, selectedTime }: TimeSlotsPro
   const [booked, setBooked] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [hoveredSlot, setHoveredSlot] = useState<string | null>(null)
+  const [isDateBlocked, setIsDateBlocked] = useState(false)
 
   useEffect(() => {
     if (!date) {
       setBooked([])
+      setIsDateBlocked(false)
       return
     }
 
     setLoading(true)
+    // Check if date is blocked
+    fetch("/api/admin/block-date")
+      .then((r) => r.json())
+      .then((blockedDates) => {
+        const blocked = blockedDates.some((d: { date: string }) => d.date === date)
+        setIsDateBlocked(blocked)
+      })
+      .catch((err) => {
+        console.error("Failed to fetch blocked dates:", err)
+      })
+
+    // Fetch appointments
     fetch(`/api/appointments?date=${date}`)
       .then((r) => r.json())
       .then((data) => {
@@ -52,6 +66,16 @@ export default function TimeSlots({ date, onSelect, selectedTime }: TimeSlotsPro
   const d = new Date(year, month - 1, day) // month is 0-indexed
   const dayOfWeek = d.getDay()
   const hours = openingHours[dayOfWeek]
+
+  if (isDateBlocked) {
+    return (
+      <div className="text-center py-16 bg-gradient-to-br from-red-50 to-red-100 rounded-2xl border-2 border-red-300 animate-slide-up shadow-elegant">
+        <div className="text-7xl mb-6 animate-pulse">🚫</div>
+        <p className="text-xl font-bold text-red-800 mb-2 font-display">Deze datum is geblokkeerd</p>
+        <p className="text-sm text-red-600 mt-2">Kies een andere datum</p>
+      </div>
+    )
+  }
 
   if (!hours) {
     return (

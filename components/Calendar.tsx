@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 interface CalendarProps {
   selectedDate: string | null
@@ -11,9 +11,21 @@ interface CalendarProps {
 export default function Calendar({ selectedDate, onDateSelect, minDate }: CalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [viewMode, setViewMode] = useState<"month" | "year">("month")
+  const [blockedDates, setBlockedDates] = useState<Set<string>>(new Set())
 
   const today = new Date()
   const min = minDate ? new Date(minDate) : today
+
+  // Fetch blocked dates
+  useEffect(() => {
+    fetch("/api/admin/block-date")
+      .then((res) => res.json())
+      .then((data) => {
+        const blockedSet = new Set(data.map((d: { date: string }) => d.date))
+        setBlockedDates(blockedSet)
+      })
+      .catch((err) => console.error("Failed to fetch blocked dates:", err))
+  }, [])
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear()
@@ -38,6 +50,12 @@ export default function Calendar({ selectedDate, onDateSelect, minDate }: Calend
     
     // Disable Sundays (day 0)
     if (date.getDay() === 0) {
+      return true
+    }
+    
+    // Check if date is blocked
+    const dateStr = formatDateString(date)
+    if (blockedDates.has(dateStr)) {
       return true
     }
     
@@ -226,14 +244,15 @@ export default function Calendar({ selectedDate, onDateSelect, minDate }: Calend
           }
 
           const date = new Date(year, month, day)
+          const dateStr = formatDateString(date)
           const disabled = isDateDisabled(date)
           const selected = isDateSelected(date)
           const isTodayDate = isToday(date)
+          const isBlocked = blockedDates.has(dateStr)
           
           // Get day name for tooltip
           const dayNames = ["Zondag", "Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag"]
           const dayName = dayNames[date.getDay()]
-          const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
 
           return (
             <button
@@ -245,7 +264,9 @@ export default function Calendar({ selectedDate, onDateSelect, minDate }: Calend
                 aspect-square rounded-lg font-semibold text-sm transition-all duration-300
                 relative group
                 ${disabled
-                  ? "bg-gray-50 text-gray-300 cursor-not-allowed"
+                  ? isBlocked
+                    ? "bg-red-50 text-red-400 border-2 border-red-300 cursor-not-allowed"
+                    : "bg-gray-50 text-gray-300 cursor-not-allowed"
                   : selected
                   ? "bg-primary-800 text-white shadow-luxury scale-105 ring-2 ring-primary-300 ring-offset-2"
                   : isTodayDate
@@ -255,11 +276,19 @@ export default function Calendar({ selectedDate, onDateSelect, minDate }: Calend
                 ${!disabled && !selected ? "hover:border-2 hover:border-primary-300" : ""}
                 active:scale-95
               `}
+              title={isBlocked ? `${dayName}, ${dateStr} - Geblokkeerd` : `${dayName}, ${dateStr}`}
               style={{
                 animationDelay: `${index * 20}ms`,
               }}
             >
               <span className="relative z-10">{day}</span>
+              {isBlocked && (
+                <div className="absolute top-1 right-1">
+                  <svg className="w-3 h-3 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              )}
               {selected && (
                 <div className="absolute inset-0 bg-gradient-to-br from-primary-700 to-primary-900 rounded-lg opacity-90" />
               )}

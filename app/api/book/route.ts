@@ -41,6 +41,21 @@ export async function POST(req: Request) {
       )
     }
 
+    // Check if date is blocked
+    const { data: blockedDate } = await supabase
+      .from("blocked_dates")
+      .select("id, reason")
+      .eq("date", date)
+      .single()
+
+    if (blockedDate) {
+      const reason = blockedDate.reason ? ` (${blockedDate.reason})` : ""
+      return new Response(
+        JSON.stringify({ error: `Deze datum is geblokkeerd${reason}. Kies een andere datum.` }),
+        { status: 403, headers: { "Content-Type": "application/json" } }
+      )
+    }
+
     // Time slot validation
     const timeValidation = validateTimeSlot(date, time)
     if (!timeValidation.valid) {

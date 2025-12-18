@@ -37,3 +37,4 @@ COMMENT ON COLUMN appointments.time IS 'Time slot in format HH:MM-HH:MM (e.g., 1
 
 
 
+

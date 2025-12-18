@@ -35,7 +35,14 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set())
   const processingRef = useRef<Set<string>>(new Set())
   const lastActionRef = useRef<{ id: string; action: string; timestamp: number } | null>(null)
-  const [activeTab, setActiveTab] = useState<"pending" | "approved" | "rejected" | "all">("all")
+  const [activeTab, setActiveTab] = useState<"pending" | "approved" | "rejected" | "all" | "dates">("all")
+  
+  // Date blocking state
+  const [blockedDates, setBlockedDates] = useState<Array<{ id: string; date: string; reason: string | null; created_at: string }>>([])
+  const [showDateManager, setShowDateManager] = useState(false)
+  const [blockDateInput, setBlockDateInput] = useState("")
+  const [blockReasonInput, setBlockReasonInput] = useState("")
+  const [loadingDates, setLoadingDates] = useState(false)
 
   // Statistics
   const stats = useMemo(() => {
@@ -70,7 +77,78 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   useEffect(() => {
     fetchAppointments()
+    fetchBlockedDates()
   }, [])
+
+  const fetchBlockedDates = async () => {
+    try {
+      const response = await fetch("/api/admin/block-date")
+      const data = await response.json()
+      setBlockedDates(data || [])
+    } catch (err) {
+      console.error("Failed to fetch blocked dates:", err)
+    }
+  }
+
+  const handleBlockDate = async () => {
+    if (!blockDateInput) {
+      alert("Selecteer een datum")
+      return
+    }
+
+    setLoadingDates(true)
+    try {
+      const response = await fetch("/api/admin/block-date", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: blockDateInput,
+          reason: blockReasonInput || null,
+        }),
+      })
+
+      if (response.ok) {
+        setBlockDateInput("")
+        setBlockReasonInput("")
+        fetchBlockedDates()
+        alert("Datum geblokkeerd")
+      } else {
+        const data = await response.json()
+        alert(data.error || "Fout bij blokkeren van datum")
+      }
+    } catch (err) {
+      console.error("Block date error:", err)
+      alert("Fout bij blokkeren van datum")
+    } finally {
+      setLoadingDates(false)
+    }
+  }
+
+  const handleUnblockDate = async (date: string) => {
+    if (!confirm(`Weet je zeker dat je ${date} wilt deblokkeren?`)) {
+      return
+    }
+
+    setLoadingDates(true)
+    try {
+      const response = await fetch(`/api/admin/block-date?date=${date}`, {
+        method: "DELETE",
+      })
+
+      if (response.ok) {
+        fetchBlockedDates()
+        alert("Datum gedeblokkeerd")
+      } else {
+        const data = await response.json()
+        alert(data.error || "Fout bij deblokkeren van datum")
+      }
+    } catch (err) {
+      console.error("Unblock date error:", err)
+      alert("Fout bij deblokkeren van datum")
+    } finally {
+      setLoadingDates(false)
+    }
+  }
 
   // Filter and sort appointments
   const filteredAndSortedAppointments = useMemo(() => {
@@ -1312,11 +1390,136 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                         {appointmentsByStatus.rejected.length}
                       </span>
                     </button>
+                    <button
+                      onClick={() => {
+                        setActiveTab("dates")
+                        setFilter("all")
+                      }}
+                      className={`px-4 py-3 font-semibold text-sm rounded-t-lg transition-all duration-200 flex items-center gap-2 ${
+                        activeTab === "dates"
+                          ? "bg-purple-500 text-white border-b-2 border-purple-600"
+                          : "text-gray-600 hover:text-purple-700 hover:bg-purple-50"
+                      }`}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <span>Datums</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${
+                        activeTab === "dates" ? "bg-white/20 text-white" : "bg-purple-100 text-purple-800"
+                      }`}>
+                        {blockedDates.length}
+                      </span>
+                    </button>
                   </nav>
                 </div>
 
                 {/* Tab Content */}
-                {currentAppointments.length === 0 ? (
+                {activeTab === "dates" ? (
+                  <div className="luxury-card p-4 sm:p-6">
+                    <h2 className="text-xl font-bold text-primary-800 mb-4">Datum Beheer</h2>
+                    
+                    {/* Block Date Form */}
+                    <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-3">Nieuwe Datum Blokkeren</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-1">Datum</label>
+                          <input
+                            type="date"
+                            value={blockDateInput}
+                            onChange={(e) => setBlockDateInput(e.target.value)}
+                            min={new Date().toISOString().split('T')[0]}
+                            className="input-modern py-2 w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-1">Reden (optioneel)</label>
+                          <input
+                            type="text"
+                            value={blockReasonInput}
+                            onChange={(e) => setBlockReasonInput(e.target.value)}
+                            placeholder="Bijv. Vakantie, Feestdag..."
+                            className="input-modern py-2 w-full"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        onClick={handleBlockDate}
+                        disabled={loadingDates || !blockDateInput}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {loadingDates ? (
+                          <>
+                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Bezig...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                            </svg>
+                            Blokkeer Datum
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Blocked Dates List */}
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-800 mb-3">Geblokkeerde Datums ({blockedDates.length})</h3>
+                      {blockedDates.length === 0 ? (
+                        <div className="text-center py-8 bg-gray-50 rounded-lg">
+                          <svg className="w-12 h-12 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <p className="text-gray-600">Geen geblokkeerde datums</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {blockedDates.map((blocked) => (
+                            <div
+                              key={blocked.id}
+                              className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-lg"
+                            >
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                  <span className="font-semibold text-gray-800">
+                                    {new Date(blocked.date).toLocaleDateString("nl-NL", {
+                                      weekday: "long",
+                                      year: "numeric",
+                                      month: "long",
+                                      day: "numeric",
+                                    })}
+                                  </span>
+                                </div>
+                                {blocked.reason && (
+                                  <p className="text-sm text-gray-600 mt-1 ml-7">{blocked.reason}</p>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => handleUnblockDate(blocked.date)}
+                                disabled={loadingDates}
+                                className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold text-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Deblokkeer
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : currentAppointments.length === 0 ? (
                   <div className="text-center py-20 luxury-card">
                     <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -1346,6 +1549,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   return appointmentsByStatus.approved
                 case "rejected":
                   return appointmentsByStatus.rejected
+                case "dates":
+                  return [] // Dates tab has its own content
                 default:
                   return filteredAndSortedAppointments
               }
