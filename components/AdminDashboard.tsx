@@ -481,7 +481,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       setSelectedIds(new Set())
       setShowBulkActions(false)
     } catch (err) {
-      alert("Fout bij bulk goedkeuren")
+      showToast("Fout bij bulk goedkeuren", "error")
     }
   }
 
@@ -494,8 +494,9 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       await Promise.all(promises)
       setSelectedIds(new Set())
       setShowBulkActions(false)
+      showToast(`${selectedIds.size} afspraken afgewezen`, "warning")
     } catch (err) {
-      alert("Fout bij bulk afwijzen")
+      showToast("Fout bij bulk afwijzen", "error")
     }
   }
 
@@ -566,28 +567,33 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   }
 
   const exportToCSV = () => {
-    const headers = ["Naam", "E-mail", "Telefoon", "Datum", "Tijd", "Status", "Bericht", "Aangemaakt"]
+    const headers = ["Naam", "E-mail", "Telefoon", "Datum", "Tijd", "Status", "Bericht", "Aangemaakt", "ID"]
     const rows = appointments.map(a => [
       a.name,
       a.email,
       a.phone || "",
       a.date,
       a.time,
-      a.status,
-      a.message || "",
-      new Date(a.created_at).toLocaleString("nl-NL")
+      a.status === "pending" ? "In Afwachting" : a.status === "approved" ? "Goedgekeurd" : "Afgewezen",
+      (a.message || "").replace(/"/g, '""'), // Escape quotes
+      new Date(a.created_at).toLocaleString("nl-NL"),
+      a.id
     ])
 
-    const csv = [
+    // Add BOM for Excel compatibility
+    const BOM = "\uFEFF"
+    const csv = BOM + [
       headers.join(","),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(","))
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(","))
     ].join("\n")
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
     const link = document.createElement("a")
     link.href = URL.createObjectURL(blob)
-    link.download = `afspraken-${new Date().toISOString().split("T")[0]}.csv`
+    const dateStr = new Date().toISOString().split("T")[0]
+    link.download = `marcofic-afspraken-${dateStr}.csv`
     link.click()
+    showToast(`CSV export succesvol (${appointments.length} afspraken)`, "success")
   }
 
   const getStatusBadge = (status: string) => {
@@ -973,26 +979,50 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             </div>
           </div>
 
-          {/* Bulk Actions */}
+          {/* Bulk Actions - Enhanced */}
           {showBulkActions && (
-            <div className="luxury-card p-3 sm:p-4 mb-4 sm:mb-6">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm text-primary-700 font-medium">{selectedIds.size} geselecteerd</span>
-                <button onClick={handleBulkApprove} className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold text-xs flex items-center gap-1.5">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Goedkeuren
-                </button>
-                <button onClick={handleBulkReject} className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold text-xs flex items-center gap-1.5">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  Afwijzen
-                </button>
-                <button onClick={() => { setSelectedIds(new Set()); setShowBulkActions(false) }} className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-semibold text-xs">
-                  Deselecteren
-                </button>
+            <div className="luxury-card p-4 mb-4 sm:mb-6 bg-gradient-to-r from-primary-50 to-blue-50 border-2 border-primary-300 shadow-elegant">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary-600 rounded-lg">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-primary-900">{selectedIds.size} afspraak{selectedIds.size !== 1 ? 'en' : ''} geselecteerd</p>
+                    <p className="text-xs text-gray-600">Kies een actie om toe te passen op alle geselecteerde items</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button 
+                    onClick={handleBulkApprove} 
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all font-semibold text-sm flex items-center gap-2 shadow-md hover:shadow-lg hover:scale-105"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Goedkeuren ({selectedIds.size})
+                  </button>
+                  <button 
+                    onClick={handleBulkReject} 
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all font-semibold text-sm flex items-center gap-2 shadow-md hover:shadow-lg hover:scale-105"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Afwijzen ({selectedIds.size})
+                  </button>
+                  <button 
+                    onClick={() => { setSelectedIds(new Set()); setShowBulkActions(false) }} 
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all font-semibold text-sm flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Deselecteren
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -1229,6 +1259,19 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         <div className="space-y-8">
           {/* Helper function to render a card */}
           {(() => {
+            // Helper function to highlight search terms
+            const highlightText = (text: string, query: string) => {
+              if (!query || !text) return text
+              const parts = text.split(new RegExp(`(${query})`, 'gi'))
+              return parts.map((part, i) => 
+                part.toLowerCase() === query.toLowerCase() ? (
+                  <mark key={i} className="bg-yellow-200 text-yellow-900 font-semibold px-1 rounded">
+                    {part}
+                  </mark>
+                ) : part
+              )
+            }
+            
             const renderCard = (apt: Appointment, index: number) => {
               const isPending = apt.status === "pending"
               const isApproved = apt.status === "approved"
@@ -1275,7 +1318,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
                             <div className="flex-1">
                               <h3 className="text-xl md:text-2xl font-bold text-primary-900 font-display mb-2 group-hover:text-primary-700 transition-colors">
-                                {apt.name}
+                                {searchQuery ? highlightText(apt.name, searchQuery) : apt.name}
                               </h3>
                               <div className="flex items-center gap-2">
                                 {getStatusBadge(apt.status)}
@@ -1298,7 +1341,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">E-mail</p>
                                 <a href={`mailto:${apt.email}`} className="text-primary-700 hover:text-primary-900 hover:underline break-all font-medium transition-colors">
-                                  {apt.email}
+                                  {searchQuery ? highlightText(apt.email, searchQuery) : apt.email}
                                 </a>
                               </div>
                             </div>
@@ -1314,7 +1357,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                                 <div className="flex-1 min-w-0">
                                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Telefoon</p>
                                   <a href={`tel:${apt.phone}`} className="text-primary-700 hover:text-primary-900 hover:underline font-medium transition-colors">
-                                    {apt.phone}
+                                    {searchQuery && apt.phone ? highlightText(apt.phone, searchQuery) : apt.phone}
                                   </a>
                                 </div>
                               </div>
