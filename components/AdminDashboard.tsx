@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from "react"
+import { ToastContainer } from "./Toast"
 
 interface Appointment {
   id: string
@@ -43,6 +44,18 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [blockDateInput, setBlockDateInput] = useState("")
   const [blockReasonInput, setBlockReasonInput] = useState("")
   const [loadingDates, setLoadingDates] = useState(false)
+  
+  // Toast notifications
+  const [toasts, setToasts] = useState<Array<{ id: string; message: string; type: "success" | "error" | "info" | "warning" }>>([])
+  
+  const showToast = (message: string, type: "success" | "error" | "info" | "warning" = "info") => {
+    const id = Date.now().toString()
+    setToasts((prev) => [...prev, { id, message, type }])
+  }
+  
+  const removeToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id))
+  }
 
   // Statistics
   const stats = useMemo(() => {
@@ -58,8 +71,18 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       weekAgo.setDate(weekAgo.getDate() - 7)
       return aptDate >= weekAgo && a.status !== "rejected"
     }).length
+    
+    // Calculate approval rate
+    const approvalRate = total > 0 ? Math.round((approved / total) * 100) : 0
+    
+    // Calculate average response time (pending appointments older than 1 day)
+    const oneDayAgo = new Date()
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1)
+    const oldPending = allAppointments.filter(a => 
+      a.status === "pending" && new Date(a.created_at) < oneDayAgo
+    ).length
 
-    return { total, pending, approved, rejected, todayCount, thisWeek }
+    return { total, pending, approved, rejected, todayCount, thisWeek, approvalRate, oldPending }
   }, [allAppointments])
 
   const fetchAppointments = async () => {
@@ -111,14 +134,14 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         setBlockDateInput("")
         setBlockReasonInput("")
         fetchBlockedDates()
-        alert("Datum geblokkeerd")
+        showToast("Datum geblokkeerd", "success")
       } else {
         const data = await response.json()
-        alert(data.error || "Fout bij blokkeren van datum")
+        showToast(data.error || "Fout bij blokkeren van datum", "error")
       }
     } catch (err) {
       console.error("Block date error:", err)
-      alert("Fout bij blokkeren van datum")
+      showToast("Fout bij blokkeren van datum", "error")
     } finally {
       setLoadingDates(false)
     }
@@ -137,14 +160,14 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
       if (response.ok) {
         fetchBlockedDates()
-        alert("Datum gedeblokkeerd")
+        showToast("Datum gedeblokkeerd", "success")
       } else {
         const data = await response.json()
-        alert(data.error || "Fout bij deblokkeren van datum")
+        showToast(data.error || "Fout bij deblokkeren van datum", "error")
       }
     } catch (err) {
       console.error("Unblock date error:", err)
-      alert("Fout bij deblokkeren van datum")
+      showToast("Fout bij deblokkeren van datum", "error")
     } finally {
       setLoadingDates(false)
     }
@@ -363,7 +386,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       }
     } catch (err) {
       console.error("❌ Approve error for:", id, err)
-      alert("Fout bij goedkeuren")
+      showToast("Fout bij goedkeuren", "error")
     } finally {
       // Clear after delay to prevent rapid re-clicks
       setTimeout(() => {
@@ -423,16 +446,18 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
       if (response.ok) {
         console.log("✅ Reject successful for:", id)
+        const appointment = allAppointments.find(a => a.id === id)
+        showToast(`${appointment?.name || "Afspraak"} is afgewezen`, "warning")
         fetchAppointments()
         setSelectedIds(new Set())
         setActiveTab("rejected") // Switch to rejected tab after rejection
       } else {
         console.error("❌ Reject failed for:", id)
-        alert("Fout bij afwijzen")
+        showToast("Fout bij afwijzen", "error")
       }
     } catch (err) {
       console.error("❌ Reject error for:", id, err)
-      alert("Fout bij afwijzen")
+      showToast("Fout bij afwijzen", "error")
     } finally {
       // Clear after delay to prevent rapid re-clicks
       setTimeout(() => {
@@ -497,15 +522,16 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
       if (response.ok) {
         console.log("✅ Delete successful for:", id)
+        showToast("Afspraak verwijderd", "success")
         fetchAppointments()
         setSelectedIds(new Set())
       } else {
         console.error("❌ Delete failed for:", id)
-        alert("Fout bij verwijderen")
+        showToast("Fout bij verwijderen", "error")
       }
     } catch (err) {
       console.error("❌ Delete error for:", id, err)
-      alert("Fout bij verwijderen")
+      showToast("Fout bij verwijderen", "error")
     } finally {
       setTimeout(() => {
         processingRef.current.delete(id)
@@ -648,7 +674,14 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               <p className="text-2xl md:text-3xl font-bold text-primary-800">{stats.total}</p>
             </div>
 
-            <div className="luxury-card p-4 bg-gradient-to-br from-yellow-50 to-white border-yellow-200">
+            <div className="luxury-card p-4 bg-gradient-to-br from-yellow-50 to-white border-yellow-200 hover:shadow-elegant transition-all duration-300 hover:-translate-y-1 relative overflow-hidden">
+              {stats.oldPending > 0 && (
+                <div className="absolute top-2 right-2">
+                  <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full animate-pulse">
+                    {stats.oldPending}
+                  </span>
+                </div>
+              )}
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-semibold text-yellow-600 uppercase tracking-wide">In Afwachting</p>
                 <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -656,6 +689,9 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 </svg>
               </div>
               <p className="text-2xl md:text-3xl font-bold text-yellow-800">{stats.pending}</p>
+              {stats.oldPending > 0 && (
+                <p className="text-xs text-red-600 mt-1 font-semibold">{stats.oldPending} aandacht vereist</p>
+              )}
             </div>
 
             <div className="luxury-card p-4 bg-gradient-to-br from-green-50 to-white border-green-200">
